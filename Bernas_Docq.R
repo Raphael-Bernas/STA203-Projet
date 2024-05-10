@@ -131,10 +131,11 @@ mae <- function(x, y) {
 acp <- PCA(xtrain, ncp = 36, graph = FALSE)    
 
 # Vérification de la reconstruction totale du nuage avec xtrain
-reconstruction_totale <- reconstruct(res = acp, nr = 1, Xm = colMeans(xtrain), Xsd = apply(xtrain, 2, sd))
+reconstruction_totale <- reconstruct(res = acp, nr = 1, Xm = colMeans(xtrain),
+                                     Xsd = apply(xtrain, 2, sd))
 par(mfrow = c(1, 1)) 
-matplot(t(reconstruction_totale), type = 'l', main = "Courbes des Spectres",
-        xlab = "Fréquences", ylab = "Mesures")
+matplot(t(reconstruction_totale), type = 'l', main = "Courbes des Spectres", xlab = "Fréquences",
+        ylab = "Mesures")
 rmse_total <- rmse(xtrain, reconstruction_totale)
 mae_total <- mae(xtrain, reconstruction_totale)
 cat("RMSE de la reconstruction totale :", rmse_total, "\n")
@@ -144,83 +145,121 @@ cat("MAE de la reconstruction totale :", mae_total, "\n\n")
 par(mfrow = c(2, 3))  # Diviser l'espace graphique en 2 lignes et 3 colonnes
 for (nr in c(1, 2, 3, 4, 5, 35)) {
   # Calcul de la reconstruction pour nr
-  reconstruction <- reconstruct(res = acp, nr = nr, Xm = colMeans(xtrain), Xsd = apply(xtrain, 2, sd))
+  reconstruction <- reconstruct(res = acp, nr = nr, Xm = colMeans(xtrain),
+                                Xsd = apply(xtrain, 2, sd))
   # Calcul de l'erreur
   rmse_val <- rmse(xtrain, reconstruction)
   mae_val <- mae(xtrain, reconstruction)
   # Tracer la reconstruction avec le titre
-  matplot(t(reconstruction), type = 'l', main = paste("Spectre pour nr =", nr, ",\nRMSE =", round(rmse_val*1000, 2), "E-03 , MAE =", round(mae_val*1000, 2), "E-03"), xlab = "Fréquences", ylab = "Mesures")
+  matplot(t(reconstruction), type = 'l', main = paste("Spectre pour nr =", nr, ",\nRMSE =",
+          round(rmse_val*1000, 2), "E-03 , MAE =", round(mae_val*1000, 2), "E-03"),
+          xlab = "Fréquences", ylab = "Mesures")
 }
 par(mfrow = c(1, 1))
 
 
 
-## Partie 3 : Régression pénalisé
+#########################################################################################
+####################  Partie 3 :  Régression pénalisée
+#########################################################################################
 
-grid=10^seq(6,-10,length=100)
-# Estimer le modèle de régression ridge
+
+###############    Q1   ################ 
+########################################
+
+# Définition de la grille de paramètres lambda
+grid <- 10^seq(6, -10, length = 100)
+
+# Estimation du modèle de régression ridge
 ridge_model <- glmnet(xtrain, ytrain, alpha = 0, lambda = grid)
 
-# Extraire les coefficients du modèle
+# Extraction des coefficients du modèle
 coefficients <- coef(ridge_model)
 
-# Extraire les valeurs estimées du paramètre d'intercept
+# Extraction des valeurs estimées du paramètre d'intercept
 intercept_values <- coefficients[1, ]
 
-# Tracer la variation de la valeur estimée du paramètre d'intercept
+# Tracé de la variation de la valeur estimée du paramètre d'intercept en fonction de lambda
 par(mfrow = c(1, 1))
-plot(log(grid), intercept_values, type = "l", lwd = 4, col = "blue", xlab = "log(lambda)", ylab = "Valeur estimée de l'intercept", main = "Variation de l'intercept avec lambda (ridge)")
+plot(log(grid), intercept_values, type = "l", lwd = 4, col = "blue", 
+     xlab = "log(lambda)", ylab = "Valeur estimée de l'intercept", 
+     main = "Variation de l'intercept avec lambda (ridge)")
 
-# Intercept calculer avec les autres estimations
-Intercept_estime=apply(-(as.matrix(xtrain)%*%coef(ridge_model)[-1,]-as.vector(ytrain)),mean,MARGIN=2)
-lines(log(grid), Intercept_estime, type = "l", lwd =2, col = "red", xlab = "log(lambda)", ylab = "Valeur estimée de l'intercept", main = "Variation de l'intercept avec lambda (ridge)")
-legend("topright", legend = c("Intercepte du modèle", "Intercepte recalculé"), lty = 1, col = c("blue", "red"), lwd = c(4, 2))
+# Calcul de l'intercept en fonction des autres estimations
+Intercept_estime <- apply(-(as.matrix(xtrain) %*% coef(ridge_model)[-1,] - as.vector(ytrain)),
+                          mean, MARGIN = 2)
+lines(log(grid), Intercept_estime, type = "l", lwd = 2, col = "red")
+legend("topright", legend = c("Intercepte du modèle", "Intercepte recalculé"), 
+       lty = 1, col = c("blue", "red"), lwd = c(4, 2))
 
-# On centre :
-xtrain_tilde = scale(xtrain, scale=FALSE)
+# Centrage des variables explicatives xtrain
+xtrain_tilde <- scale(xtrain, scale = FALSE)
 ridge_model_tilde1 <- glmnet(xtrain_tilde, ytrain, alpha = 0, lambda = grid)
 coefficients_tilde1 <- coef(ridge_model_tilde1)
 intercept_values_tilde1 <- coefficients_tilde1[1, ]
-par(mfrow = c(1, 1))
-plot(log(grid), intercept_values_tilde1, type = "l", lwd = 3, col = "blue", xlab = "log(lambda)", ylab = "Valeur estimée de l'intercept", main = "Variation de l'intercept avec lambda (ridge)", ylim = c(-10, 100))
 
-ytrain_tilde = scale(ytrain, scale=FALSE)
+# Tracé de la variation de l'intercept avec lambda pour xtrain centré
+plot(log(grid), intercept_values_tilde1, type = "l", lwd = 3, col = "blue", 
+     xlab = "log(lambda)", ylab = "Valeur estimée de l'intercept", 
+     main = "Variation de l'intercept avec lambda (ridge)", ylim = c(-10, 100))
+
+# Centrage de la variable réponse ytrain
+ytrain_tilde <- scale(ytrain, scale = FALSE)
 ridge_model_tilde2 <- glmnet(xtrain_tilde, ytrain_tilde, alpha = 0, lambda = grid)
 coefficients_tilde2 <- coef(ridge_model_tilde2)
 intercept_values_tilde2 <- coefficients_tilde2[1, ]
-lines(log(grid), intercept_values_tilde2, type = "l", lwd = 3, col = "red", xlab = "log(lambda)", ylab = "Valeur estimée de l'intercept", main = "Variation de l'intercept avec lambda (ridge)")
-legend("topright", legend = c("Intercepte du modèle X centré", "Intercepte du modèle X et Y centré"), lty = 1, col = c("blue", "red"), lwd = c(4, 2))
 
-#On centre-réduit
-n = length(xtrain[,1])
-xtrain_scaled = scale(xtrain)*sqrt(n/(n-1))
-ytrain_scaled = scale(ytrain)*sqrt(n/(n-1))
+# Tracé de la variation de l'intercept avec lambda pour xtrain et ytrain centrés
+lines(log(grid), intercept_values_tilde2, type = "l", lwd = 3, col = "red")
+legend(-16, 60, legend = c("Intercepte du modèle X centré", "Intercepte du modèle X et Y centré"), 
+       lty = 1, col = c("blue", "red"), lwd = c(4, 2))
+
+# Centrage et réduction des variables explicatives et de la variable réponse
+n <- length(xtrain[,1])
+xtrain_scaled <- scale(xtrain) * sqrt(n / (n - 1))
+ytrain_scaled <- scale(ytrain) * sqrt(n / (n - 1))
+
+# Calcul de la matrice A0
 svd_xtrain <- svd(xtrain_scaled)
 u <- svd_xtrain$u
 v <- svd_xtrain$v
 s <- svd_xtrain$d
-A0 <- v %*% diag((1 / s)) %*% t(u)
-mae(A0 %*% xtrain_scaled, diag(rep(1,401))) # MAE de I - A0*X : proche de 0 donc on à presqu'une inverse
+A0 <- v %*% diag(1 / s) %*% t(u)
 
-theta = A0%*%ytrain_scaled # valeur observé de theta
+# Calcul de l'erreur absolue moyenne (MAE) de I - A0 * X : proche de 0 donc on a presque une pseudo-inverse
+mae(A0 %*% xtrain_scaled, diag(rep(1, 401)))
+
+# Calcul de la valeur observée de l'estimateur θbλ
+theta <- A0 %*% ytrain_scaled
 head(theta)
 head(A0)
 
+
+###############    Q2   ################ 
+########################################
+
+# Estimation du modèle de régression ridge avec glmnet
 ridge_model_scaled <- glmnet(xtrain_scaled, ytrain_scaled, alpha = 0, lambda = grid)
 coefficients_scaled <- coef(ridge_model_scaled)
 
+# Calcul de l'estimation du biais de ridge
 bias_ridge_estimate <- apply((as.matrix(coefficients_scaled[-1,])-as.vector(theta)),2,mean)
 par(mfrow = c(1, 1))
-plot(log(grid), bias_ridge_estimate, type = "l", lwd = 4, col = "blue", xlab = "log(lambda)", ylab = "Valeur estimée du biais de ridge", main = "Variation du biais éstimé avec lambda ")
+plot(log(grid), bias_ridge_estimate, type = "l", lwd = 4, col = "blue", xlab = "log(lambda)",
+     ylab = "Valeur estimée du biais de ridge", main = "Variation du biais éstimé avec lambda ")
 
-# lm.ridge
+# Utilisation de lm.ridge
 res.ridge <- lm.ridge(ytrain_scaled ~ xtrain_scaled, lambda = grid)
 coefficients_lmridge <- res.ridge$coef
-# On calcul ici un RSE entre les prédictions du theta obtenu a la question précédente qui est une estimation correcte de theta quand lambda tend vers 0 et les prédictions des thetas de lm.ridge
-MSE_ridge_estimate <- apply((as.matrix((xtrain_scaled %*% coefficients_lmridge)) - as.vector(xtrain_scaled %*% theta))^2, 2, mean)
-par(mfrow = c(1, 1))
-plot(log(grid), MSE_ridge_estimate, type = "l", lwd = 4, col = "blue", xlab = "log(lambda)", ylab = "Valeur estimée du RSE de ridge", main = "Variation du RSE éstimé avec lambda ")
 
+# Calcul de l'erreur quadratique moyenne (RSE) de ridge
+MSE_ridge_estimate <- apply((as.matrix((xtrain_scaled %*% coefficients_lmridge)) - 
+                               as.vector(xtrain_scaled %*% theta))^2, 2, mean)
+par(mfrow = c(1, 1))
+plot(log(grid), MSE_ridge_estimate, type = "l", lwd = 4, col = "blue", xlab = "log(lambda)",
+     ylab = "Valeur estimée de la RSE de ridge", main = "Variation de la RSE éstimée avec lambda ")
+
+# Fonction pour effectuer la régression ridge
 ridge_regression <- function(lambda) {
   XTX <- t(xtrain_scaled) %*% xtrain_scaled
   XTX_lambda <- XTX + lambda * diag(ncol(xtrain_scaled))
@@ -228,20 +267,38 @@ ridge_regression <- function(lambda) {
   theta_hat <- solve(XTX_lambda) %*% XTY
   return(theta_hat)
 }
+
+# Calcul des thetas avec la régression ridge directe
 lambda <- 0.001
-theta_hat_list <- apply(as.matrix(grid), function(lambda){ridge_regression(lambda/2)}, MARGIN=1)
+theta_hat_list <- apply(as.matrix(grid), function(lambda){ridge_regression(lambda/2)}, MARGIN = 1)
+
+# Comparaison des thetas estimés avec ceux de glmnet
 head(theta_hat_list[,1])
 head(coefficients_scaled[-1,1])
-diff_theta_evolution <- apply((as.matrix(coefficients_scaled[-1,])-as.matrix(theta_hat_list))^2,2,mean)
-par(mfrow = c(1, 1))
-plot(log(grid), diff_theta_evolution, type = "l", lwd = 4, col = "blue", xlab = "log(lambda)", ylab = "Valeur estimée de la difference L2 des thetas", main = "Variation de la différence L2 des thetas selon lambda ")
-# On a une faible difference donc une méthode calculé très proche de la méthode utilisé par glmnet
-theta_hat_test_list <- apply(as.matrix(grid), function(lambda){ridge_regression(lambda)}, MARGIN=1)
-coef_test_autre <- coef(glmnet(xtrain_scaled, ytrain_scaled, alpha = 0, lambda = grid, family="gaussian"))
-diff_theta_evolution <- apply((as.matrix(coef_test_autre[-1,])-as.matrix(theta_hat_test_list))^2,2,mean)
-par(mfrow = c(1, 1))
-plot(log(grid), diff_theta_evolution, type = "l", lwd = 4, col = "blue", xlab = "log(lambda)", ylab = "Valeur estimée de la difference L2 des thetas", main = "Variation pour famille gaussienne de la différence L2 des thetas selon lambda ")
 
+# Calcul de la différence L2 des thetas
+diff_theta_evolution <- apply((as.matrix(coefficients_scaled[-1,]) - as.matrix(theta_hat_list))^2,
+                              2, mean)
+par(mfrow = c(1, 1))
+plot(log(grid), diff_theta_evolution, type = "l", lwd = 4, col = "blue", xlab = "log(lambda)",
+     ylab = "Valeur estimée de la difference L2 des thetas",
+     main = "Variation de la différence L2 des thetas selon lambda ")
+
+# Comparaison avec une autre famille (gaussienne) pour la régression glmnet
+theta_hat_test_list <- apply(as.matrix(grid), function(lambda){ridge_regression(lambda)},
+                             MARGIN = 1)
+coef_test_autre <- coef(glmnet(xtrain_scaled, ytrain_scaled, alpha = 0, lambda = grid,
+                               family="gaussian"))
+diff_theta_evolution <- apply((as.matrix(coef_test_autre[-1,])-as.matrix(theta_hat_test_list))^2,
+                              2, mean)
+par(mfrow = c(1, 1))
+plot(log(grid), diff_theta_evolution, type = "l", lwd = 4, col = "blue", xlab = "log(lambda)",
+     ylab = "Valeur estimée de la difference L2 des thetas",
+     main = "Variation pour famille gaussienne de la différence L2 des thetas selon lambda ")
+
+
+###############    Q3   ################ 
+########################################
 
 set.seed(123)
 cv_segments <- cvsegments(n, k = 4)
