@@ -1,3 +1,7 @@
+#########################################################################################
+####################  Raphaël BERNAS & Mayeul DOCQ
+#########################################################################################
+
 rm(list=ls())
 graphics.off()
 library(ggplot2)
@@ -7,29 +11,32 @@ library(FactoMineR)
 library(factoextra)
 library(glmnet)
 library(MASS)
-library(pls)
-library(caret)
-# Vous pouvez changer la variable path pour changer le working directory
-path = "C:/Users/R/OneDrive/Bureau/Travail/Ensta_Paris/Math/STA203/Projet-STA203"
-setwd(path)
+setwd("C:/Users/mayeu/Desktop/2A ENSTA x Master IPP/STA203/Projet")
 
-## Partie 2 : Analyse exploratoire
+#########################################################################################
+####################  Partie 2 : Analyse exploratoire
+#########################################################################################
 
-# Récupération des jeux de données
-df_test=read.table("gasolineTest.txt",header=T)
-dim(df_test)
-df_train=read.table("gasolineTrain.txt",header=T)
-dim(df_train)
 
-xtrain <- as.matrix(df_train[, -1])  # Exclure la première colonne (indice d'octane)
-xtest <- as.matrix(df_test[, -1])    # Exclure la première colonne (indice d'octane)
+###############    Q1   ################ 
+########################################
 
-ytrain <- df_train$octane
-ytest <- df_test$octane
+# Chargement des données
+df_test <- read.table("gasolineTest.txt", header = TRUE)
+df_train <- read.table("gasolineTrain.txt", header = TRUE)
 
-par(mfrow = c(4, 6))  
+# Séparation des variables explicatives et des réponses
+xtrain <- as.matrix(df_train[, -1])  # Variables explicatives du jeu d'apprentissage
+xtest <- as.matrix(df_test[, -1])    # Variables explicatives du jeu de test
+ytrain <- df_train$octane            # Réponses du jeu d'apprentissage
+ytest <- df_test$octane              # Réponses du jeu de test
 
-for (i in 1:24) {
+# Boxplots des variables explicatives
+par(mfrow = c(3, 4))
+for (i in 1:12) {
+  boxplot(xtrain[, i], main = colnames(xtrain)[i], ylab = "Valeurs")
+}
+for (i in 13:24) {
   boxplot(xtrain[, i], main = colnames(xtrain)[i], ylab = "Valeurs")
 }
 
@@ -38,63 +45,90 @@ par(mfrow = c(1, 1))
 matplot(t(xtrain), type = 'l', main = "Courbes des Spectres",
         xlab = "Fréquences", ylab = "Mesures")
 
-# Corrélation 
+# Corrélation entre les mesures aux différentes fréquences
 correlation_matrix <- cor(xtrain)
+# corrplot(correlation_matrix, method = "circle") # Attention : long a calculer
 heatmap(correlation_matrix, 
         main = "Corrélation entre les Mesures aux Différentes Fréquences",
         xlab = "Fréquences", ylab = "Fréquences")
-corrplot(correlation_matrix,method = "circle") # Attention c'est long a calculé
 
-# ACP
-acp <- PCA(xtrain, ncp = 5) #  graph = FALSE
+
+###############    Q2   ################ 
+########################################
+
+# Analyse en Composantes Principales (ACP)
+acp <- PCA(xtrain, ncp = 6, graph = FALSE)
 
 # Graphe des valeurs propres
-par(mfrow = c(1, 1))
-eigenvalues <- acp$eig[, "eigenvalue"]
-barplot(acp$eig[, "percentage of variance"], main = "Contribution des Valeurs Propres",
-        xlab = "Composantes Principales", ylab = "Pourcentage de Variance Expliqué")
+par(mfrow = c(1, 2))
+barplot(acp$eig[, "percentage of variance"], 
+        main = "Contribution des Valeurs Propres",
+        xlab = "Composantes Principales", 
+        ylab = "Pourcentage de Variance Expliqué")
+barplot(acp$eig[, "cumulative percentage of variance"], 
+        main = "Pourcentage Cumulatif de Variance",
+        xlab = "Composantes Principales", 
+        ylab = "Pourcentage Cumulatif de Variance Expliqué")
 
-barplot(acp$eig[, "cumulative percentage of variance"], main = "Pourcentage Cumulatif de Variance",
-        xlab = "Composantes Principales", ylab = "Pourcentage Cumulatif de Variance Expliqué")
+# Nuages dans les six premiers axes principaux
+fviz_pca_ind(acp, axes = c(1,2), geom = "point")
+fviz_pca_ind(acp, axes = c(1,3), geom = "point")
+fviz_pca_ind(acp, axes = c(1,4), geom = "point")
+fviz_pca_ind(acp, axes = c(1,5), geom = "point")
+fviz_pca_ind(acp, axes = c(1,6), geom = "point")
 
-# Plot des nuages dans les six premiers axes principaux
-# Définir les combinaisons d'axes à afficher
-combinaisons_axes <- list(c(1, 2), c(3, 4), c(5, 1))
+fviz_pca_ind(acp, axes = c(2,3), geom = "point")
+fviz_pca_ind(acp, axes = c(2,4), geom = "point")
+fviz_pca_ind(acp, axes = c(2,5), geom = "point")
+fviz_pca_ind(acp, axes = c(2,6), geom = "point")
 
-# Tracer les nuages de points pour chaque combinaison d'axes
-for (comb in combinaisons_axes) {
-  plot <- fviz_pca_ind(acp, axes = comb, geom = "point")
-  print(plot)
-}
+fviz_pca_ind(acp, axes = c(3,4), geom = "point")
+fviz_pca_ind(acp, axes = c(3,5), geom = "point")
+fviz_pca_ind(acp, axes = c(3,6), geom = "point")
 
+fviz_pca_ind(acp, axes = c(4,5), geom = "point")
+fviz_pca_ind(acp, axes = c(4,6), geom = "point")
+
+fviz_pca_ind(acp, axes = c(5,6), geom = "point")
+
+
+###############    Q3   ################ 
+########################################
+
+# Fonction pour reconstruire le nuage suivant les premiers nr axes de l'ACP
 reconstruct <- function(res, nr, Xm, Xsd) {
   # Sélectionner les premiers nr axes de l'ACP
-  axes <- res$ind$coord[,1:nr]
-  vars <- t(res$var$coord[,1:nr])
-  if(nr!=1){
-    eigenvalue_inv<- diag(1/sqrt(res$eig[1:nr,1]))
-    reconstructed <- axes%*%eigenvalue_inv%*%vars
-  }
-  else{
-    eigenvalue_inv<- 1/sqrt(res$eig[1:nr,1])
-    reconstructed <- eigenvalue_inv*axes%*%vars
+  axes <- res$ind$coord[, 1:nr]
+  vars <- t(res$var$coord[, 1:nr])
+  
+  # Calcul de la reconstruction en fonction du nombre de axes
+  if (nr != 1) {
+    eigenvalue_inv <- diag(1 / sqrt(res$eig[1:nr, 1]))
+    reconstructed <- axes %*% eigenvalue_inv %*% vars
+  } else {
+    eigenvalue_inv <- 1 / sqrt(res$eig[1:nr, 1])
+    reconstructed <- eigenvalue_inv * axes %*% vars
   }
   
-  # Réduire les axes selon les écarts-types et les moyennes des variables explicatives
+  # Réduction des axes (selon écarts-types et moyennes des variables explicatives)
   cloud <- t(t(reconstructed) * Xsd + Xm)
   
   # Retourner les axes reconstruits
   return(cloud)
 }
+
 # Fonction pour calculer l'erreur quadratique moyenne (RMSE)
-rmse <- function(x, y) {
+rmse <- function(x, y) {    
   return(sqrt(mean((x - y)^2)))
 }
 
 # Fonction pour calculer l'erreur en valeur absolue (MAE)
-mae <- function(x, y) {
+mae <- function(x, y) {     
   return(mean(abs(x - y)))
 }
+
+# ACP recalculée afin de considérer toutes les variables
+acp <- PCA(xtrain, ncp = 36, graph = FALSE)    
 
 # Vérification de la reconstruction totale du nuage avec xtrain
 reconstruction_totale <- reconstruct(res = acp, nr = 1, Xm = colMeans(xtrain), Xsd = apply(xtrain, 2, sd))
@@ -106,31 +140,20 @@ mae_total <- mae(xtrain, reconstruction_totale)
 cat("RMSE de la reconstruction totale :", rmse_total, "\n")
 cat("MAE de la reconstruction totale :", mae_total, "\n\n")
 
-# Tracer les reconstructions pour chaque nr
+# Représentation de la reconstruction pour différentes valeurs de nr
 par(mfrow = c(2, 3))  # Diviser l'espace graphique en 2 lignes et 3 colonnes
-for (nr in c(1, 2, 3, 4, 5)) {
+for (nr in c(1, 2, 3, 4, 5, 35)) {
   # Calcul de la reconstruction pour nr
   reconstruction <- reconstruct(res = acp, nr = nr, Xm = colMeans(xtrain), Xsd = apply(xtrain, 2, sd))
-  
   # Calcul de l'erreur
   rmse_val <- rmse(xtrain, reconstruction)
   mae_val <- mae(xtrain, reconstruction)
-  
   # Tracer la reconstruction avec le titre
-  plot(reconstruction, main = paste("Reconstruction pour nr =", nr, "\nRMSE =", round(rmse_val, 2), "MAE =", round(mae_val, 2)))
+  matplot(t(reconstruction), type = 'l', main = paste("Spectre pour nr =", nr, ",\nRMSE =", round(rmse_val*1000, 2), "E-03 , MAE =", round(mae_val*1000, 2), "E-03"), xlab = "Fréquences", ylab = "Mesures")
 }
-par(mfrow = c(2, 3))  # Diviser l'espace graphique en 2 lignes et 3 colonnes
-for (nr in c(1, 2, 3, 4, 5)) {
-  # Calcul de la reconstruction pour nr
-  reconstruction <- reconstruct(res = acp, nr = nr, Xm = colMeans(xtrain), Xsd = apply(xtrain, 2, sd))
-  
-  # Calcul de l'erreur
-  rmse_val <- rmse(xtrain, reconstruction)
-  mae_val <- mae(xtrain, reconstruction)
-  
-  # Tracer la reconstruction avec le titre
-  matplot(t(reconstruction), type = 'l', main = paste("Spectre pour nr =", nr, "\nRMSE =", round(rmse_val, 2), "MAE =", round(mae_val, 2)), xlab = "Fréquences", ylab = "Mesures")
-}
+par(mfrow = c(1, 1))
+
+
 
 ## Partie 3 : Régression pénalisé
 
