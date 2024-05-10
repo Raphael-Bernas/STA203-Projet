@@ -360,8 +360,8 @@ ggplot(data_rmse, aes(x = log(lambda), y = rmse)) +
 
 fld = rep(0,36)
 for (i in 1:36){
-  fld[i]=(is.element(i,cv_segments$V1))+2*(is.element(i,cv_segments$V2))+3*(is.element(i,cv_segments$V3))+
-    4*(is.element(i,cv_segments$V4))
+  fld[i] = (is.element(i,cv_segments$V1)) + 2*(is.element(i,cv_segments$V2)) +
+            3*(is.element(i,cv_segments$V3)) + 4*(is.element(i,cv_segments$V4))
 }
 
 # Validation croisée avec glmnet
