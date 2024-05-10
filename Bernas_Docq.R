@@ -425,40 +425,63 @@ lasso_performance <- lasso_model$results$RMSE
 print(paste("Performance du modèle de régression ridge (RMSE) :", mean(ridge_performance)))
 print(paste("Performance du modèle de régression lasso (RMSE) :", mean(lasso_performance)))
 
-## Partie 4 : Régression logistique pénalisé
 
-z <- (ytrain > 88) - 0
-ztest <- (ytest > 88) - 0
-sum(z==1)/sum(z==0)
-sum(ztest==1)/sum(ztest==0)
-# les jeux sont plutôt équilibré
 
+#########################################################################################
+####################  Partie 4 : Régression logistique pénalisé
+#########################################################################################
+
+
+###############    Q1   ################ 
+########################################
+
+z <- (ytrain > 88)
+ztest <- (ytest > 88)
+sum(z == 1) / sum(z == 0)
+sum(ztest == 1) / sum(ztest == 0)
+
+
+###############    Q2   ################ 
+########################################
+
+B <- 4  # Nombre de plis
+
+# Validation croisée pour la régression logistique pénalisée en ridge
 ridge_cv <- cv.glmnet(x = xtrain_scaled, y = z, family = "binomial", alpha = 0,
-                      foldid = fld, type.measure="class")
+                      foldid = fld, type.measure = "class", nfolds = B)
+
+# Validation croisée pour la régression logistique pénalisée en lasso
 lasso_cv <- cv.glmnet(x = xtrain_scaled, y = z, family = "binomial", alpha = 1,
-                      foldid = fld, type.measure="class")
-
-
+                      foldid = fld, type.measure = "class", nfolds = B)
 par(mfrow = c(1, 2))  
 plot(ridge_cv, main = "modèle de ridge")
 plot(lasso_cv, main = "modèle de lasso")
 
+
+# Calcul des probabilités prédites
 ridge_prob <- predict(ridge_cv, newx = xtest_scaled, s = "lambda.min", type = "response")
 lasso_prob <- predict(lasso_cv, newx = xtest_scaled, s = "lambda.min", type = "response")
-# Bayes
+
+# Prédiction binaire basée sur le seuil de 0.5
 ridge_pred <- ifelse(ridge_prob > 0.5, 1, 0)
 lasso_pred <- ifelse(lasso_prob > 0.5, 1, 0)
-# Erreur de généralisation (taux d'erreur) pour chaque modèle
+
+# Calcul de l'erreur de généralisation pour chaque modèle
 ridge_error <- mean(ridge_pred != ztest)
 lasso_error <- mean(lasso_pred != ztest)
+
+# Affichage des erreurs de généralisation
 print(paste("Erreur de généralisation pour la régression logistique pénalisée en ridge :", ridge_error))
 print(paste("Erreur de généralisation pour la régression logistique pénalisée en lasso :", lasso_error))
 
-# Tracer les courbes roc
-par(mfrow=c(1,1))
-plot(roc.glmnet(ridge_cv,newx=xtest_scaled,newy=ztest,family="binomial"),type='l', col = "blue")
-lines(roc.glmnet(lasso_cv,newx=xtest_scaled,newy=ztest,family="binomial"),type='l', col = "red")
+
+###############    Q3   ################ 
+########################################
+
+# Tracé des courbes ROC en apprentissage et en test
+par(mfrow = c(1, 1))
+plot(roc.glmnet(ridge_cv, newx = xtest_scaled, newy = ztest, family = "binomial"), type = 'l',
+     col = "blue", main = "Courbes ROC pour ridge et lasso")
+lines(roc.glmnet(lasso_cv, newx = xtest_scaled, newy = ztest, family = "binomial"), type = 'l', col = "red")
 abline(0, 1, col = "black")
 legend("bottomright", legend = c("Ridge", "Lasso"), col = c("blue", "red"), lty = 1, cex = 0.8)
-# Lasso gagne devant ridge : en effet aire entre droite noir et courbe de lasso plus grande que c'elle pour ridge
-
