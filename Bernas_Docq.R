@@ -11,6 +11,9 @@ library(FactoMineR)
 library(factoextra)
 library(glmnet)
 library(MASS)
+library(pls)
+library(caret)
+library(pROC)
 setwd("C:/Users/mayeu/Desktop/2A ENSTA x Master IPP/STA203/Projet")
 
 #########################################################################################
