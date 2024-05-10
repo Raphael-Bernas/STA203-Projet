@@ -278,7 +278,6 @@ rmse_cv_lambda <- apply(rmse_cv_lambda_i, MARGIN = 2, FUN = mean)
 # Trouver la valeur optimale de lambda
 lambda_opt <- lambda_grid[which.min(rmse_cv_lambda)]
 
-# Affichage du résultat avec ggplot2
 ggplot() + geom_line(mapping = aes(x = log(lambda_grid), y = rmse_cv_lambda)) + 
   xlab("log(lambda)") + ylab("rmse_CV")
 lambda_opt
@@ -322,8 +321,9 @@ ggplot(data_cvglmnet, aes(x = log(1/lambda), y = rmse)) +
 
 lambda_opt # lambda optimale pour validation croisé a la main
 ridge_model_final <- glmnet(y = ytrain_scaled, x = xtrain_scaled, alpha = 0, lambda = lambda_opt)
-xtest_scaled <- scale(xtest)*(n/(n-1))
-ytest_scaled <- scale(ytest)*(n/(n-1))
+n_test <- length(ytest)
+xtest_scaled <- scale(xtest)*(n_test/(n_test-1))
+ytest_scaled <- scale(ytest)*(n_test/(n_test-1))
 y_pred_test <- predict(ridge_model_final, newx = xtest_scaled)
 RMSE_test <- sqrt(mean((ytest_scaled - y_pred_test)^2))
 print(paste("Erreur de généralisation (RMSE) CV à la main :", RMSE_test))
@@ -337,11 +337,11 @@ print(paste("Erreur de généralisation (RMSE) cvglmnet :", RMSE_test))
 
 # BONUS : Partie 3
 control <- trainControl(method = "cv", number = 5)  # 5-fold cross-validation
-# Définir la grille des paramètres pour les modèles de régression ridge et lasso
+# grille des paramètres pour les modèles de régression ridge et lasso
 ridge_grid <- expand.grid(alpha = 0, lambda = lambda_grid)
 lasso_grid <- expand.grid(alpha = 1, lambda = lambda_grid)
 
-# Utiliser la fonction train() pour ajuster les modèles de régression ridge et lasso
+# Ajuster les modèles de régression ridge et lasso
 ridge_model <- train(ytrain_scaled ~ ., data = data.frame(xtrain_scaled, ytrain_scaled),
                      method = "glmnet", trControl = control, tuneGrid = ridge_grid)
 lasso_model <- train(ytrain_scaled ~ ., data = data.frame(xtrain_scaled, ytrain_scaled),
@@ -358,3 +358,42 @@ print(paste("Performance du modèle de régression lasso (RMSE) :", mean(lasso_p
 # La principale différence entre la régression ridge et la régression lasso réside dans la façon dont elles pénalisent les coefficients.
 #La régression ridge utilise une pénalité L2 (norme Euclidienne), ce qui conduit à des coefficients réduits vers zéro mais pas exactement à zéro.
 #La régression lasso utilise une pénalité L1 (norme de Manhattan), ce qui favorise la parcimonie en forçant de nombreux coefficients à zéro, ce qui permet la sélection de variables.
+
+
+## Partie 4 : Régression logistique pénalisé
+
+z <- (ytrain > 88) - 0
+ztest <- (ytest > 88) - 0
+sum(z==1)/sum(z==0)
+sum(ztest==1)/sum(ztest==0)
+# les jeux sont plutôt équilibré
+
+ridge_cv <- cv.glmnet(x = xtrain_scaled, y = z, family = "binomial", alpha = 0,
+                      foldid = fld, type.measure="class")
+lasso_cv <- cv.glmnet(x = xtrain_scaled, y = z, family = "binomial", alpha = 1,
+                      foldid = fld, type.measure="class")
+
+
+par(mfrow = c(1, 2))  
+plot(ridge_cv, main = "modèle de ridge")
+plot(lasso_cv, main = "modèle de lasso")
+
+ridge_prob <- predict(ridge_cv, newx = xtest_scaled, s = "lambda.min", type = "response")
+lasso_prob <- predict(lasso_cv, newx = xtest_scaled, s = "lambda.min", type = "response")
+# Bayes
+ridge_pred <- ifelse(ridge_prob > 0.5, 1, 0)
+lasso_pred <- ifelse(lasso_prob > 0.5, 1, 0)
+# Erreur de généralisation (taux d'erreur) pour chaque modèle
+ridge_error <- mean(ridge_pred != ztest)
+lasso_error <- mean(lasso_pred != ztest)
+print(paste("Erreur de généralisation pour la régression logistique pénalisée en ridge :", ridge_error))
+print(paste("Erreur de généralisation pour la régression logistique pénalisée en lasso :", lasso_error))
+
+# Tracer les courbes roc
+par(mfrow=c(1,1))
+plot(roc.glmnet(ridge_cv,newx=xtest_scaled,newy=ztest,family="binomial"),type='l', col = "blue")
+lines(roc.glmnet(lasso_cv,newx=xtest_scaled,newy=ztest,family="binomial"),type='l', col = "red")
+abline(0, 1, col = "black")
+legend("bottomright", legend = c("Ridge", "Lasso"), col = c("blue", "red"), lty = 1, cex = 0.8)
+# Lasso gagne devant ridge : en effet aire entre droite noir et courbe de lasso plus grande que c'elle pour ridge
+
