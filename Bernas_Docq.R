@@ -7,6 +7,8 @@ library(FactoMineR)
 library(factoextra)
 library(glmnet)
 library(MASS)
+library(pls)
+library(caret)
 # Vous pouvez changer la variable path pour changer le working directory
 path = "C:/Users/R/OneDrive/Bureau/Travail/Ensta_Paris/Math/STA203/Projet-STA203"
 setwd(path)
@@ -211,3 +213,125 @@ diff_theta_evolution <- apply((as.matrix(coefficients_scaled[-1,])-as.matrix(the
 par(mfrow = c(1, 1))
 plot(log(grid), diff_theta_evolution, type = "l", lwd = 4, col = "blue", xlab = "log(lambda)", ylab = "Valeur estimée de la difference L2 des thetas", main = "Variation de la différence L2 des thetas selon lambda ")
 # On a une faible difference donc une méthode calculé très proche de la méthode utilisé par glmnet
+theta_hat_test_list <- apply(as.matrix(grid), function(lambda){ridge_regression(lambda)}, MARGIN=1)
+coef_test_autre <- coef(glmnet(xtrain_scaled, ytrain_scaled, alpha = 0, lambda = grid, family="gaussian"))
+diff_theta_evolution <- apply((as.matrix(coef_test_autre[-1,])-as.matrix(theta_hat_test_list))^2,2,mean)
+par(mfrow = c(1, 1))
+plot(log(grid), diff_theta_evolution, type = "l", lwd = 4, col = "blue", xlab = "log(lambda)", ylab = "Valeur estimée de la difference L2 des thetas", main = "Variation pour famille gaussienne de la différence L2 des thetas selon lambda ")
+
+
+set.seed(123)
+cv_segments <- cvsegments(n, k = 4)
+
+# Fonction pour calculer le RMSE
+rmse_lambda <- function(predictions, actual) {
+  return(sqrt(mean((predictions - actual)^2))) 
+}
+
+# Initialisation de la matrice pour stocker les RMSE
+rmse_cv_lambda_i <- matrix(rep(1, 4 * length(lambda_grid)), nrow = 4)
+
+# Boucle sur les segments de validation croisée
+for (i in seq_along(cv_segments)) {
+  Y_cv <- ytrain_scaled[cv_segments[[i]]]
+  Y_train <- ytrain_scaled[-cv_segments[[i]]]
+  X_cv <- xtrain_scaled[cv_segments[[i]], ]
+  X_train <- xtrain_scaled[-cv_segments[[i]], ]
+  
+  # Estimation des coefficients avec régression ridge
+  ridge_coef <- coef(glmnet(y = Y_train, x = X_train, family = "gaussian", alpha = 0, lambda = (4/n)*lambda_grid)) # on multiplie lambda par (4/n) qui correspond a la longueur des sous-ensembles, cela est dû a la façon dont lambda est calculé par glmnet 
+  teta_cv <- ridge_coef[-1,]  # En variables centrées et réduites, l'intercept est nul
+  
+  # Prédiction sur les données de validation
+  Y_pred_cv <- X_cv %*% teta_cv
+  
+  # Calcul du RMSE pour chaque valeur de lambda
+  rmse_cv_lambda_i[i,] <- apply(Y_pred_cv, MARGIN = 2, FUN = function(predictions) rmse_lambda(predictions, Y_cv))
+}
+
+# Calcul de la moyenne des RMSE pour chaque valeur de lambda
+rmse_cv_lambda <- apply(rmse_cv_lambda_i, MARGIN = 2, FUN = mean)
+
+# Trouver la valeur optimale de lambda
+lambda_opt <- lambda_grid[which.min(rmse_cv_lambda)]
+
+# Affichage du résultat avec ggplot2
+ggplot() + geom_line(mapping = aes(x = log(lambda_grid), y = rmse_cv_lambda)) + 
+  xlab("log(lambda)") + ylab("rmse_CV")
+lambda_opt
+
+# df contient les degrés de liberté
+df <- n - 1
+alpha <- 0.05  # Niveau de confiance
+CI_down <- sqrt(qchisq(1 - alpha / 2, df) / df) * sqrt(rmse_cv_lambda/n)
+CI_up <- sqrt(qchisq(alpha / 2, df) / df) * sqrt(rmse_cv_lambda/n)
+data_rmse <- data.frame(lambda = lambda_grid, rmse = rmse_cv_lambda, CI_upper = CI_down, CI_lower = CI_up)
+
+# Tracer le graphique avec les barres d'erreur
+ggplot(data_rmse, aes(x = log(lambda), y = rmse)) +
+  geom_point() +  # Points pour l'erreur moyenne
+  geom_errorbar(aes(ymin = rmse - CI, ymax = rmse + CI), width = 0.05) +  # Barres d'erreur pour l'intervalle de confiance
+  xlab("log(lambda)") + ylab("RMSE") +
+  ggtitle("Erreur moyenne avec intervalle de confiance")
+
+fld=rep(0,36)
+for (i in 1:36){
+  
+  fld[i]=(is.element(i,cv_segments$V1))+2*(is.element(i,cv_segments$V2))+3*(is.element(i,cv_segments$V3))+
+    4*(is.element(i,cv_segments$V4))
+}
+cv_model <- cv.glmnet(xtrain_scaled, ytrain_scaled, alpha = 0, lambda = (4/n)*lambda_grid, foldid=fld)
+
+# Extraire les valeurs de lambda et les RMSE moyens à partir du modèle cv.glmnet
+lambda_cvglmnet <- cv_model$lambda
+rmse_cvglmnet <- cv_model$cvm
+ICup_cvglmnet <- cv_model$cvup
+IClo_cvglmnet <- cv_model$cvlo
+
+# Créer un dataframe pour les valeurs de lambda, les RMSE et les bornes des intervalles de confiance
+data_cvglmnet <- data.frame(lambda = lambda_cvglmnet, rmse = rmse_cvglmnet, CI_upper = ICup_cvglmnet, CI_lower = IClo_cvglmnet)
+
+ggplot(data_cvglmnet, aes(x = log(1/lambda), y = rmse)) +
+  geom_point() +  # Points pour l'erreur moyenne
+  geom_errorbar(aes(ymin = CI_lower, ymax = CI_upper), width = 0.05) +  # Barres d'erreur pour l'intervalle de confiance complet
+  xlab("log(lambda)") + ylab("RMSE") +
+  ggtitle("Erreur moyenne avec intervalle de confiance complet (cv.glmnet)")
+
+lambda_opt # lambda optimale pour validation croisé a la main
+ridge_model_final <- glmnet(y = ytrain_scaled, x = xtrain_scaled, alpha = 0, lambda = lambda_opt)
+xtest_scaled <- scale(xtest)*(n/(n-1))
+ytest_scaled <- scale(ytest)*(n/(n-1))
+y_pred_test <- predict(ridge_model_final, newx = xtest_scaled)
+RMSE_test <- sqrt(mean((ytest_scaled - y_pred_test)^2))
+print(paste("Erreur de généralisation (RMSE) CV à la main :", RMSE_test))
+
+lambda_opt_cvglmnet <- lambda_grid[which.min(rmse_cvglmnet)] # lambda optimale trouvé par cvglmnet
+lambda_opt_cvglmnet
+ridge_model_final <- glmnet(y = ytrain_scaled, x = xtrain_scaled, alpha = 0, lambda = lambda_opt_cvglmnet)
+y_pred_test <- predict(ridge_model_final, newx = xtest_scaled)
+RMSE_test <- sqrt(mean((ytest_scaled - y_pred_test)^2))
+print(paste("Erreur de généralisation (RMSE) cvglmnet :", RMSE_test))
+
+# BONUS : Partie 3
+control <- trainControl(method = "cv", number = 5)  # 5-fold cross-validation
+# Définir la grille des paramètres pour les modèles de régression ridge et lasso
+ridge_grid <- expand.grid(alpha = 0, lambda = lambda_grid)
+lasso_grid <- expand.grid(alpha = 1, lambda = lambda_grid)
+
+# Utiliser la fonction train() pour ajuster les modèles de régression ridge et lasso
+ridge_model <- train(ytrain_scaled ~ ., data = data.frame(xtrain_scaled, ytrain_scaled),
+                     method = "glmnet", trControl = control, tuneGrid = ridge_grid)
+lasso_model <- train(ytrain_scaled ~ ., data = data.frame(xtrain_scaled, ytrain_scaled),
+                     method = "glmnet", trControl = control, tuneGrid = lasso_grid)
+
+# Comparer les performances des modèles
+ridge_performance <- ridge_model$results$RMSE
+lasso_performance <- lasso_model$results$RMSE
+
+# Afficher les performances
+print(paste("Performance du modèle de régression ridge (RMSE) :", mean(ridge_performance)))
+print(paste("Performance du modèle de régression lasso (RMSE) :", mean(lasso_performance)))
+
+# La principale différence entre la régression ridge et la régression lasso réside dans la façon dont elles pénalisent les coefficients.
+#La régression ridge utilise une pénalité L2 (norme Euclidienne), ce qui conduit à des coefficients réduits vers zéro mais pas exactement à zéro.
+#La régression lasso utilise une pénalité L1 (norme de Manhattan), ce qui favorise la parcimonie en forçant de nombreux coefficients à zéro, ce qui permet la sélection de variables.
